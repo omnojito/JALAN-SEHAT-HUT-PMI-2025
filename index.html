@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Pendaftaran Peserta Jalan Sehat</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header><h1>Pendaftaran Peserta Jalan Sehat</h1></header>
+
+    <section class="card form-card">
+      <form id="formPeserta">
+        <div class="row">
+          <div class="col">
+            <label for="nama">Nama</label>
+            <input id="nama" type="text" required />
+          </div>
+          <div class="col">
+            <label for="nik">NIK</label>
+            <input id="nik" type="text" maxlength="16" required />
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="instansi">Asal Instansi</label>
+            <input id="instansi" type="text" />
+          </div>
+          <div class="col">
+            <label for="kupon">Jumlah Kupon</label>
+            <input id="kupon" type="number" min="1" value="1" required />
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-full">
+            <label for="alamat">Alamat</label>
+            <input id="alamat" type="text" required />
+          </div>
+        </div>
+        <div class="actions">
+          <button id="btnSave" type="submit" class="btn btn-primary">Simpan</button>
+          <button id="btnReset" type="button" class="btn btn-outline">Bersihkan</button>
+          <button id="btnExport" type="button" class="btn btn-success">Export Excel</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card table-card">
+      <h2>Daftar Peserta</h2>
+      <div id="status" class="status">Memuat...</div>
+      <div class="table-wrap">
+        <table id="tabelPeserta">
+          <thead>
+            <tr><th>No</th><th>Nama</th><th>Alamat</th><th>NIK</th><th>Instansi</th><th>Kupon</th><th>Aksi</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="footer">Made with ♥ — Pendaftaran Jalan Sehat</footer>
+  </div>
+
+<script src="script.js"></script>
+</body>
+</html>
