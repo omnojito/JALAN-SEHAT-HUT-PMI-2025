@@ -1,0 +1,303 @@
+# Creating ZIP package for Google Sheets API version of the app
+import os, zipfile, json, textwrap
+proj = "/mnt/data/peserta_google_sheets"
+os.makedirs(proj, exist_ok=True)
+
+# index.html
+index_html = """<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Pendaftaran Peserta Jalan Sehat</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header><h1>Pendaftaran Peserta Jalan Sehat</h1></header>
+
+    <section class="card form-card">
+      <form id="formPeserta">
+        <div class="row">
+          <div class="col">
+            <label for="nama">Nama</label>
+            <input id="nama" type="text" required />
+          </div>
+          <div class="col">
+            <label for="nik">NIK</label>
+            <input id="nik" type="text" maxlength="16" required />
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="instansi">Asal Instansi</label>
+            <input id="instansi" type="text" />
+          </div>
+          <div class="col">
+            <label for="kupon">Jumlah Kupon</label>
+            <input id="kupon" type="number" min="1" value="1" required />
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-full">
+            <label for="alamat">Alamat</label>
+            <input id="alamat" type="text" required />
+          </div>
+        </div>
+        <div class="actions">
+          <button id="btnSave" type="submit" class="btn btn-primary">Simpan</button>
+          <button id="btnReset" type="button" class="btn btn-outline">Bersihkan</button>
+          <button id="btnExport" type="button" class="btn btn-success">Export Excel</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card table-card">
+      <h2>Daftar Peserta</h2>
+      <div id="status" class="status">Memuat...</div>
+      <div class="table-wrap">
+        <table id="tabelPeserta">
+          <thead>
+            <tr><th>No</th><th>Nama</th><th>Alamat</th><th>NIK</th><th>Instansi</th><th>Kupon</th><th>Aksi</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="footer">Made with ♥ — Pendaftaran Jalan Sehat</footer>
+  </div>
+
+<script src="script.js"></script>
+</body>
+</html>
+"""
+
+# style.css
+style_css = """:root{
+  --primary:#4facfe; --accent:#00f2fe; --muted:#6b7280; --bg:#f4f7fb;
+  --card:#ffffff;
+}
+*{box-sizing:border-box}
+body{font-family:Inter, 'Poppins', sans-serif;background:linear-gradient(135deg,var(--primary),var(--accent));margin:0;padding:32px}
+.container{max-width:1100px;margin:0 auto;background:var(--bg);padding:24px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.2)}
+header h1{text-align:center;margin:0 0 12px;font-size:26px}
+.card{background:var(--card);padding:18px;border-radius:10px;margin-bottom:18px;box-shadow:0 6px 18px rgba(8,15,30,0.06)}
+.form-card .row{display:flex;gap:12px;margin-bottom:12px}
+.col{flex:1}
+.col-full{flex:1}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+input{width:100%;padding:10px;border:1px solid #e6e9ef;border-radius:8px;font-size:14px}
+.actions{display:flex;gap:10px;align-items:center;margin-top:8px}
+.btn{padding:10px 14px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
+.btn-primary{background:linear-gradient(90deg,#2563eb,#4facfe);color:white}
+.btn-outline{background:white;border:1px solid #d1d5db;color:#374151}
+.btn-success{background:linear-gradient(90deg,#10b981,#34d399);color:white;margin-left:auto}
+.table-card h2{margin:0 0 8px}
+.status{font-size:13px;color:var(--muted);margin-bottom:8px}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse;background:white}
+th,td{padding:10px;text-align:left;border-bottom:1px solid #eef2f7}
+th{background:linear-gradient(90deg,#4facfe,#60e0ff);color:white;position:sticky;top:0}
+.action-btn{padding:6px 8px;border-radius:6px;border:none;cursor:pointer;font-weight:600}
+.action-edit{background:#f59e0b;color:white;margin-right:6px}
+.action-delete{background:#ef4444;color:white}
+.footer{text-align:center;color:var(--muted);font-size:13px;padding-top:8px}
+@media(max-width:700px){.form-card .row{flex-direction:column}}
+"""
+
+# script.js - using Google Apps Script Web App API
+script_js = https://script.google.com/macros/s/AKfycbzz4_4imoYb12kJftbh16gTWdhXxeRWxeNkcCFQ0QC76rL5iyI3BdxxAyn0eyRijIHUCA/exec;
+
+const form = document.getElementById('formPeserta');
+const tabelBody = document.querySelector('#tabelPeserta tbody');
+const statusEl = document.getElementById('status');
+const btnReset = document.getElementById('btnReset');
+const btnExport = document.getElementById('btnExport');
+
+let pesertaList = []; // will hold {row: number, nama, alamat, nik, instansi, kupon}
+
+// load data from Google Sheets
+async function loadData() {
+  statusEl.textContent = 'Memuat data...';
+  try {
+    const res = await fetch(API_URL + '?action=read');
+    if(!res.ok) throw new Error('Gagal mengambil data');
+    const data = await res.json();
+    // data is array of objects with rowNumber
+    pesertaList = data;
+    renderTable();
+    statusEl.textContent = 'Data terbarui';
+  } catch (err) {
+    statusEl.textContent = 'Error memuat data: ' + err.message;
+    console.error(err);
+  }
+}
+
+function renderTable(){
+  tabelBody.innerHTML = '';
+  if(!pesertaList.length){ tabelBody.innerHTML = '<tr><td colspan=\"7\" style=\"text-align:center;color:#6b7280\">Belum ada peserta terdaftar</td></tr>'; return; }
+  pesertaList.forEach((p, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td>${escapeHtml(p.nama)}</td>
+      <td>${escapeHtml(p.alamat)}</td>
+      <td>${escapeHtml(p.nik)}</td>
+      <td>${escapeHtml(p.instansi)}</td>
+      <td>${escapeHtml(p.kupon)}</td>
+      <td>
+        <button class="action-btn action-edit" onclick="startEdit(${p.row})">Edit</button>
+        <button class="action-btn action-delete" onclick="deleteRow(${p.row})">Hapus</button>
+      </td>
+    `;
+    tabelBody.appendChild(tr);
+  });
+}
+
+function escapeHtml(s){ if(s===undefined||s===null) return ''; return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\"','&quot;'); }
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = {
+    nama: document.getElementById('nama').value.trim(),
+    alamat: document.getElementById('alamat').value.trim(),
+    nik: document.getElementById('nik').value.trim(),
+    instansi: document.getElementById('instansi').value.trim(),
+    kupon: document.getElementById('kupon').value.trim()
+  };
+  // basic validation
+  if(!data.nama||!data.alamat||!data.nik){ alert('Nama, Alamat, dan NIK wajib diisi'); return; }
+  // check duplicate NIK on client before sending
+  if(pesertaList.some(p=>p.nik===data.nik)){ alert('NIK sudah terdaftar'); return; }
+  try {
+    statusEl.textContent = 'Menyimpan...';
+    await fetch(API_URL + '?action=create', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    form.reset();
+    await loadData();
+  } catch(err){
+    statusEl.textContent = 'Error menyimpan: '+err.message;
+    console.error(err);
+  }
+});
+
+btnReset.addEventListener('click', ()=> form.reset());
+
+// start edit by filling form and setting hidden editRow (we'll implement update as delete+create)
+function startEdit(rowNumber){
+  const p = pesertaList.find(x=>x.row===rowNumber);
+  if(!p) return;
+  document.getElementById('nama').value = p.nama;
+  document.getElementById('alamat').value = p.alamat;
+  document.getElementById('nik').value = p.nik;
+  document.getElementById('instansi').value = p.instansi;
+  document.getElementById('kupon').value = p.kupon;
+  // delete the existing row so when user saves it's added as new row
+  if(confirm('Siapkan formulir untuk edit. Klik OK untuk menghapus baris lama (akan dibuat ulang saat disimpan).')) {
+    deleteRow(rowNumber).then(()=>{ loadData(); });
+  }
+}
+
+// delete row by row number (as returned from server)
+async function deleteRow(rowNumber){
+  if(!confirm('Hapus data peserta ini?')) return;
+  try {
+    await fetch(API_URL + '?action=delete&row=' + rowNumber);
+    await loadData();
+  } catch(err){
+    console.error(err);
+  }
+}
+
+// export to Excel (sheet full table + sheets per column)
+btnExport.addEventListener('click', async ()=>{
+  await loadData(); // ensure fresh
+  const data = pesertaList.map(p => ({Nama:p.nama, Alamat:p.alamat, NIK:p.nik, Instansi:p.instansi, Kupon:p.kupon}));
+  const wb = XLSX.utils.book_new();
+  // full sheet
+  const wsFull = XLSX.utils.json_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, wsFull, 'Data_Lengkap');
+  // per-column sheets
+  const names = [['Nama'], ...pesertaList.map(p=>[p.nama])];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(names), 'Nama');
+  const addrs = [['Alamat'], ...pesertaList.map(p=>[p.alamat])];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(addrs), 'Alamat');
+  const niks = [['NIK'], ...pesertaList.map(p=>[p.nik])];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(niks), 'NIK');
+  const insts = [['Instansi'], ...pesertaList.map(p=>[p.instansi])];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(insts), 'Instansi');
+  const kupons = [['Kupon'], ...pesertaList.map(p=>[p.kupon])];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(kupons), 'Kupon');
+  XLSX.writeFile(wb, 'daftar_peserta_online.xlsx');
+});
+
+// initial load
+loadData();
+"""
+
+# apps_script.gs content for Google Apps Script
+apps_script = """// Google Apps Script for Google Sheet backend
+function doGet(e){
+  var action = e.parameter.action || 'read';
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getActiveSheet();
+  if(action == 'read'){
+    var data = sheet.getDataRange().getValues();
+    var out = [];
+    for(var i=1;i<data.length;i++){
+      out.push({ row: i+1, nama: data[i][0], alamat: data[i][1], nik: data[i][2], instansi: data[i][3], kupon: data[i][4] });
+    }
+    return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+  } else if(action == 'delete'){
+    var row = parseInt(e.parameter.row,10);
+    if(row && row>1){
+      sheet.deleteRow(row);
+      return ContentService.createTextOutput(JSON.stringify({status:'deleted'})).setMimeType(ContentService.MimeType.JSON);
+    } else {
+      return ContentService.createTextOutput(JSON.stringify({status:'error',message:'invalid row'})).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+  return ContentService.createTextOutput(JSON.stringify({status:'unknown action'})).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e){
+  var action = (e.parameter && e.parameter.action) || 'create';
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getActiveSheet();
+  var body = e.postData && e.postData.contents ? e.postData.contents : null;
+  if(!body) return ContentService.createTextOutput(JSON.stringify({status:'error',message:'no body'})).setMimeType(ContentService.MimeType.JSON);
+  var data = JSON.parse(body);
+  if(action == 'create'){
+    sheet.appendRow([data.nama || '', data.alamat || '', data.nik || '', data.instansi || '', data.kupon || '']);
+    return ContentService.createTextOutput(JSON.stringify({status:'created'})).setMimeType(ContentService.MimeType.JSON);
+  } else {
+    return ContentService.createTextOutput(JSON.stringify({status:'unknown action'})).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+"""
+
+# README with deployment instructions
+readme = """# Pendaftaran Peserta Jalan Sehat (Google Sheets backend)\n\nThis package contains a static front-end (index.html, style.css, script.js) that connects to a Google Sheets backend through a Google Apps Script Web App.\n\n## Files\n- index.html — main page\n- style.css — styles\n- script.js — frontend logic (replace API_URL with your Web App URL)\n- apps_script.gs — Google Apps Script code to paste into your Google Sheet's Apps Script editor\n\n## Setup Guide\n1. Create a new Google Sheet. Put headers in row 1: `Nama | Alamat | NIK | Instansi | Kupon`.\n2. Open `Extensions -> Apps Script` and paste the contents of `apps_script.gs` into the editor.\n3. Save project. Deploy -> New deployment -> select **Web app**.\n   - Set **Execute as**: Me\n   - Set **Who has access**: Anyone\n   - Click Deploy and copy the Web App URL.\n4. Edit `script.js` and replace `PASTE_YOUR_WEB_APP_URL_HERE` with the Web App URL.\n5. Upload `index.html`, `style.css`, and `script.js` to your GitHub Pages repository (or open locally), then open the page.\n\n## Notes\n- The Apps Script returns `row` numbers starting from 2 (because headers are row 1). Deleting rows shifts following row numbers.\n- For editing we implement a simple flow: the app deletes the existing row and creates a new one when the user edits and saves.\n- Make sure your Web App is deployed with \"Anyone\" access.\n\nIf you want, I can deploy the Apps Script for you if you share access, or guide you step-by-step during deployment.\n"""
+
+# write files
+with open(os.path.join(proj, "index.html"), "w", encoding="utf-8") as f:
+    f.write(index_html)
+with open(os.path.join(proj, "style.css"), "w", encoding="utf-8") as f:
+    f.write(style_css)
+with open(os.path.join(proj, "script.js"), "w", encoding="utf-8") as f:
+    f.write(script_js)
+with open(os.path.join(proj, "apps_script.gs"), "w", encoding="utf-8") as f:
+    f.write(apps_script)
+with open(os.path.join(proj, "README.md"), "w", encoding="utf-8") as f:
+    f.write(readme)
+
+# create zip
+zip_path = "/mnt/data/peserta_google_sheets.zip"
+with zipfile.ZipFile(zip_path, 'w') as zf:
+    for root, dirs, files in os.walk(proj):
+        for file in files:
+            path = os.path.join(root, file)
+            zf.write(path, arcname=os.path.relpath(path, proj))
+
+zip_path
